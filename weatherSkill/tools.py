@@ -71,8 +71,108 @@ def get_attraction(city: str, weather: str) -> str:
         return f"错误:执行Tavily搜索时出现问题 - {e}"
 
 
+def check_ticket_info(attraction: str, city: str = "") -> str:
+    """
+    查询景点的门票信息，包括价格和可用性。
+    返回 JSON 格式的字符串，包含 price(价格), availability(可用性), currency(货币单位)
+    """
+    import random
+    import json
+
+    api_key = os.environ.get("TAVILY_API_KEY")
+    if not api_key:
+        return json.dumps({"error": "未配置TAVILY_API_KEY环境变量"})
+
+    tavily = TavilyClient(api_key=api_key)
+
+    # 搜索门票价格和可用性
+    query = f"{city}{attraction}门票价格 多少钱 开放时间"
+
+    try:
+        response = tavily.search(query=query, search_depth="basic", include_answer=True)
+
+        # 模拟解析搜索结果提取价格信息
+        # 实际场景中可以使用更复杂的NLP来提取
+        price_keywords = ["免费", "元", "门票", "价格", "成人票", "学生票"]
+        search_content = response.get("answer", "")
+
+        # 模拟价格数据（实际应该从搜索结果中解析）
+        # 随机生成价格或标记为免费景点
+        is_free = "免费" in search_content or "免门票" in search_content
+
+        if is_free:
+            price = 0
+        else:
+            # 模拟价格范围 20-150 元
+            price = random.choice([20, 30, 50, 55, 70, 80, 100, 120, 150])
+
+        # 模拟可用性
+        availability = "available" if random.random() > 0.2 else "sold_out"
+
+        result = {
+            "attraction": attraction,
+            "city": city,
+            "price": price,
+            "currency": "CNY",
+            "availability": availability,
+            "is_free": is_free,
+            "notes": "价格仅供参考，请以官方渠道为准" if not is_free else "该景点免费开放"
+        }
+
+        return json.dumps(result, ensure_ascii=False)
+
+    except Exception as e:
+        # 如果搜索失败，返回模拟数据
+        result = {
+            "attraction": attraction,
+            "city": city,
+            "price": "unknown",
+            "availability": "available",
+            "error": f"查询失败: {str(e)}"
+        }
+        return json.dumps(result, ensure_ascii=False)
+
+
+def get_alternative_attraction(city: str, weather: str, excluded: str = "") -> str:
+    """
+    获取备选景点推荐，排除已推荐的景点。
+    excluded: 已推荐过的景点名称，用逗号分隔
+    """
+    api_key = os.environ.get("TAVILY_API_KEY")
+    if not api_key:
+        return "错误:未配置TAVILY_API_KEY环境变量。"
+
+    tavily = TavilyClient(api_key=api_key)
+
+    # 构造查询，排除已推荐的景点
+    excluded_list = [e.strip() for e in excluded.split(",") if e.strip()]
+    exclude_str = "，排除以下景点:" + "、".join(excluded_list) if excluded_list else ""
+
+    query = f"'{city}' 在'{weather}'天气下最值得去的旅游景点推荐{exclude_str}，要求是不同的备选方案"
+
+    try:
+        response = tavily.search(query=query, search_depth="basic", include_answer=True)
+
+        if response.get("answer"):
+            return response["answer"]
+
+        formatted_results = []
+        for result in response.get("results", []):
+            formatted_results.append(f"- {result['title']}: {result['content']}")
+
+        if not formatted_results:
+            return "抱歉，没有找到其他备选景点。"
+
+        return "为您找到以下备选景点:\n" + "\n".join(formatted_results)
+
+    except Exception as e:
+        return f"错误:执行Tavily搜索时出现问题 - {e}"
+
+
 # 将所有工具函数放入一个字典，方便后续调用
 available_tools = {
     "get_weather": get_weather,
     "get_attraction": get_attraction,
+    "check_ticket_info": check_ticket_info,
+    "get_alternative_attraction": get_alternative_attraction,
 }
